@@ -4,7 +4,7 @@ import os
 
 PERTINENT_COLUMNS = [
     # Game & At-Bat Scenario
-    'game_date', 'game_pk', 'at_bat_number', 'pitch_number', 
+    'game_date', 'game_type', 'game_pk', 'at_bat_number', 'pitch_number', 
     'inning', 'inning_topbot', 'outs_when_up', 'balls', 'strikes',
     'on_3b', 'on_2b', 'on_1b', 'home_score', 'away_score', 'post_home_score', 'post_away_score',
     
