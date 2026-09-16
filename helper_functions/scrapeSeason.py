@@ -1,5 +1,7 @@
 from pybaseball import statcast
+from pybaseball import statcast_sprint_speed
 import pandas as pd
+import numpy as np
 import os
 
 PERTINENT_COLUMNS = [
@@ -15,18 +17,51 @@ PERTINENT_COLUMNS = [
     'pitch_type', 'pitch_name', 'release_speed', 'release_spin_rate', 
     'spin_axis', 'release_pos_x', 'release_pos_z', 'release_extension', 
     'plate_x', 'plate_z', 'zone', 'pfx_x', 'pfx_z', 
-    'vx0', 'vy0', 'vz0', 'ax', 'ay', 'az',
+    'vx0', 'vy0', 'vz0', 'ax', 'ay', 'az', 'sz_top', 'sz_bot',
     
     # Pitch Outcome
     'events', 'description', 'type',
     
     # Hit & Batted Ball Data
-    'launch_speed', 'launch_angle', 'hit_distance_sc', 'bb_type', 'estimated_ba_using_speedangle', 'estimated_woba_using_speedangle',
+    'launch_speed', 'launch_angle', 'hit_distance_sc', 'bb_type', 
+    'estimated_ba_using_speedangle', 'estimated_woba_using_speedangle',
+    'hc_x', 'hc_y',
     
     # Defensive Positioning Data
     'if_fielding_alignment', 'of_fielding_alignment'
 ]
 
+def add_sprint_speed(df: pd.DataFrame, year: int, min_opp: int = 1) -> pd.DataFrame:
+
+    # 1. Fetch the sprint speed leaderboard for the given season
+    speed_df = statcast_sprint_speed(year, min_opp=min_opp)
+    
+    # 2. Select relevant columns and align player_id with the 'batter' column
+    speed_df = speed_df[['player_id', 'sprint_speed']].rename(
+        columns={'player_id': 'batter'}
+    )
+    
+    # 3. Left merge back onto the main pitch-by-pitch Statcast DataFrame
+    df_merged = df.merge(speed_df, on='batter', how='left')
+    
+    return df_merged
+
+def add_spray_angle(df: pd.DataFrame) -> pd.DataFrame:
+    # Create the column populated with NaN by default
+    df['spray_angle'] = np.nan
+    
+    # Identify rows where both coordinates are present
+    valid_mask = df['hc_x'].notna() & df['hc_y'].notna()
+    
+    if valid_mask.any():
+        # Translate coordinates relative to home plate
+        dx = df.loc[valid_mask, 'hc_x'] - 125
+        dy = 198.27 - df.loc[valid_mask, 'hc_y']
+        
+        # Calculate spray angle in degrees for valid rows only
+        df.loc[valid_mask, 'spray_angle'] = np.degrees(np.arctan2(dx, dy))
+        
+    return df
 
 def fetch_and_save_season_statcast(year: int, output_dir: str = 'Data', columns: list = PERTINENT_COLUMNS) -> None:
     """
@@ -51,7 +86,14 @@ def fetch_and_save_season_statcast(year: int, output_dir: str = 'Data', columns:
         return {}
 
     # Filter for desired columns available in dataset
-    df = df[columns]
+    available_cols = [col for col in PERTINENT_COLUMNS if col in df.columns]
+    df = df[available_cols]
+
+    # Add column for batter sprint speed
+    df = add_sprint_speed(df, year)
+
+    #Add columns for spray angle
+    df = add_spray_angle(df)
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
